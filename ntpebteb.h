@@ -7,6 +7,8 @@
 #ifndef _NTPEBTEB_H
 #define _NTPEBTEB_H
 
+#include "helper.h"
+
 typedef struct _RTL_USER_PROCESS_PARAMETERS *PRTL_USER_PROCESS_PARAMETERS;
 typedef struct _RTL_CRITICAL_SECTION *PRTL_CRITICAL_SECTION;
 typedef struct _SILO_USER_SHARED_DATA *PSILO_USER_SHARED_DATA;
@@ -101,27 +103,81 @@ typedef struct _TELEMETRY_COVERAGE_HEADER
     ULONG HashTable[ANYSIZE_ARRAY];
 } TELEMETRY_COVERAGE_HEADER, *PTELEMETRY_COVERAGE_HEADER;
 
+union PEB_BITFIELD_UNION
+{
+    BOOLEAN BitField;
+    struct
+    {
+        BOOLEAN ImageUsesLargePages : 1;
+        BOOLEAN IsProtectedProcess : 1;
+        BOOLEAN IsImageDynamicallyRelocated : 1;
+        BOOLEAN SkipPatchingUser32Forwarders : 1;
+        BOOLEAN IsPackagedProcess : 1;
+        BOOLEAN IsAppContainer : 1;
+        BOOLEAN IsProtectedProcessLight : 1;
+        BOOLEAN IsLongPathAwareProcess : 1;
+    };
+};
+
+union PEB_CROSS_PROCESS_FLAGS_UNION
+{
+    ULONG CrossProcessFlags;
+    struct
+    {
+        ULONG ProcessInJob : 1;
+        ULONG ProcessInitializing : 1;
+        ULONG ProcessUsingVEH : 1;
+        ULONG ProcessUsingVCH : 1;
+        ULONG ProcessUsingFTH : 1;
+        ULONG ProcessPreviouslyThrottled : 1;
+        ULONG ProcessCurrentlyThrottled : 1;
+        ULONG ProcessImagesHotPatched : 1; // REDSTONE5
+        ULONG ReservedBits0 : 24;
+    };
+};
+
+union PEB_KERNEL_CALLBACK_TABLE_UNION
+{
+    PVOID KernelCallbackTable;
+    PVOID UserSharedInfoPtr;
+};
+
+union PEB_CONTEXT_DATA_UNION
+{
+    PVOID pContextData; // WIN7
+    PVOID pUnused; // WIN10
+    PVOID EcCodeBitMap; // WIN11
+};
+
+union PEB_TRACING_FLAGS_UNION
+{
+    ULONG TracingFlags;
+    struct
+    {
+        ULONG HeapTracingEnabled : 1;
+        ULONG CritSecTracingEnabled : 1;
+        ULONG LibLoaderTracingEnabled : 1;
+        ULONG SpareTracingBits : 29;
+    };
+};
+
+union PEB_LEAP_SECONDS_FLAG_UNION
+{
+    ULONG LeapSecondFlags;
+    struct
+    {
+        ULONG SixtySecondEnabled : 1;
+        ULONG Reserved : 31;
+    };
+};
+
 // symbols
 typedef struct _PEB
 {
     BOOLEAN InheritedAddressSpace;
     BOOLEAN ReadImageFileExecOptions;
     BOOLEAN BeingDebugged;
-    union
-    {
-        BOOLEAN BitField;
-        struct
-        {
-            BOOLEAN ImageUsesLargePages : 1;
-            BOOLEAN IsProtectedProcess : 1;
-            BOOLEAN IsImageDynamicallyRelocated : 1;
-            BOOLEAN SkipPatchingUser32Forwarders : 1;
-            BOOLEAN IsPackagedProcess : 1;
-            BOOLEAN IsAppContainer : 1;
-            BOOLEAN IsProtectedProcessLight : 1;
-            BOOLEAN IsLongPathAwareProcess : 1;
-        };
-    };
+    PEB_BITFIELD_UNION BitField;
 
     HANDLE Mutant;
 
@@ -133,35 +189,16 @@ typedef struct _PEB
     PRTL_CRITICAL_SECTION FastPebLock;
     PSLIST_HEADER AtlThunkSListPtr;
     PVOID IFEOKey;
+    PEB_CROSS_PROCESS_FLAGS_UNION CrossProcessFlags;
+    PEB_KERNEL_CALLBACK_TABLE_UNION KernelCallbackTable;
 
-    union
-    {
-        ULONG CrossProcessFlags;
-        struct
-        {
-            ULONG ProcessInJob : 1;
-            ULONG ProcessInitializing : 1;
-            ULONG ProcessUsingVEH : 1;
-            ULONG ProcessUsingVCH : 1;
-            ULONG ProcessUsingFTH : 1;
-            ULONG ProcessPreviouslyThrottled : 1;
-            ULONG ProcessCurrentlyThrottled : 1;
-            ULONG ProcessImagesHotPatched : 1; // REDSTONE5
-            ULONG ReservedBits0 : 24;
-        };
-    };
-    union
-    {
-        PVOID KernelCallbackTable;
-        PVOID UserSharedInfoPtr;
-    };
     ULONG SystemReserved;
     ULONG AtlThunkSListPtr32;
     PAPI_SET_NAMESPACE ApiSetMap;
     ULONG TlsExpansionCounter;
     PRTL_BITMAP TlsBitmap;
-    ULONG TlsBitmapBits[2]; // TLS_MINIMUM_AVAILABLE
 
+    ARRAY_CONTAINER<ULONG, 2> TlsBitmapBits; // TLS_MINIMUM_AVAILABLE
     PVOID ReadOnlySharedMemoryBase;
     PSILO_USER_SHARED_DATA SharedData; // HotpatchInformation
     PVOID *ReadOnlyStaticServerData;
@@ -198,11 +235,11 @@ typedef struct _PEB
     ULONG ImageSubsystemMajorVersion;
     ULONG ImageSubsystemMinorVersion;
     KAFFINITY ActiveProcessAffinityMask;
-    GDI_HANDLE_BUFFER GdiHandleBuffer;
+    ARRAY_CONTAINER<ULONG, GDI_HANDLE_BUFFER_SIZE> GdiHandleBuffer;
     PVOID PostProcessInitRoutine;
 
     PRTL_BITMAP TlsExpansionBitmap;
-    ULONG TlsExpansionBitmapBits[32]; // TLS_EXPANSION_SLOTS
+    ARRAY_CONTAINER<ULONG, 32> TlsExpansionBitmapBits; // TLS_EXPANSION_SLOTS
 
     ULONG SessionId;
 
@@ -220,12 +257,12 @@ typedef struct _PEB
 
     SIZE_T MinimumStackCommit;
 
-    PVOID SparePointers[2]; // 19H1 (previously FlsCallback to FlsHighIndex)
+    ARRAY_CONTAINER<PVOID, 2> SparePointers; // 19H1 (previously FlsCallback to FlsHighIndex)
     PVOID PatchLoaderData;
     PVOID ChpeV2ProcessInfo; // _CHPEV2_PROCESS_INFO
 
     ULONG AppModelFeatureState;
-    ULONG SpareUlongs[2];
+    ARRAY_CONTAINER<ULONG, 2> SpareUlongs;
 
     USHORT ActiveCodePage;
     USHORT OemCodePage;
@@ -235,44 +272,23 @@ typedef struct _PEB
     PVOID WerRegistrationData;
     PVOID WerShipAssertPtr;
 
-    union
-    {
-        PVOID pContextData; // WIN7
-        PVOID pUnused; // WIN10
-        PVOID EcCodeBitMap; // WIN11
-    };
+    PEB_CONTEXT_DATA_UNION ContextData;
 
     PVOID pImageHeaderHash;
-    union
-    {
-        ULONG TracingFlags;
-        struct
-        {
-            ULONG HeapTracingEnabled : 1;
-            ULONG CritSecTracingEnabled : 1;
-            ULONG LibLoaderTracingEnabled : 1;
-            ULONG SpareTracingBits : 29;
-        };
-    };
+    PEB_TRACING_FLAGS_UNION TracingFlags;
+
     ULONGLONG CsrServerReadOnlySharedMemoryBase;
     PRTL_CRITICAL_SECTION TppWorkerpListLock;
     LIST_ENTRY TppWorkerpList;
-    PVOID WaitOnAddressHashTable[128];
+    ARRAY_CONTAINER<PVOID, 128> WaitOnAddressHashTable;
     PTELEMETRY_COVERAGE_HEADER TelemetryCoverageHeader; // REDSTONE3
     ULONG CloudFileFlags;
     ULONG CloudFileDiagFlags; // REDSTONE4
     CHAR PlaceholderCompatibilityMode;
-    CHAR PlaceholderCompatibilityModeReserved[7];
+    ARRAY_CONTAINER<CHAR, 7> PlaceholderCompatibilityModeReserved;
     PLEAP_SECOND_DATA LeapSecondData; // REDSTONE5
-    union
-    {
-        ULONG LeapSecondFlags;
-        struct
-        {
-            ULONG SixtySecondEnabled : 1;
-            ULONG Reserved : 31;
-        };
-    };
+    PEB_LEAP_SECONDS_FLAG_UNION LeapSecondFlags;
+
     ULONG NtGlobalFlag2;
     ULONGLONG ExtendedFeatureDisableMask; // since WIN11
 } PEB, *PPEB;
@@ -290,7 +306,6 @@ C_ASSERT(FIELD_OFFSET(PEB, SessionId) == 0x1D4);
 //C_ASSERT(sizeof(PEB) == 0x480); // REDSTONE5 // 19H1
 C_ASSERT(sizeof(PEB) == 0x488); // WIN11
 #endif
-
 #define GDI_BATCH_BUFFER_SIZE 310
 
 typedef struct _GDI_TEB_BATCH
@@ -328,6 +343,49 @@ typedef struct _TEB_ACTIVE_FRAME_EX
 #define STATIC_UNICODE_BUFFER_LENGTH 261
 #define WIN32_CLIENT_INFO_LENGTH 62
 
+union TEB_CURRENT_IDEAL_PROCESSOR_UNION
+{
+    PROCESSOR_NUMBER CurrentIdealProcessor;
+    ULONG IdealProcessorValue;
+    struct
+    {
+        UCHAR ReservedPad0;
+        UCHAR ReservedPad1;
+        UCHAR ReservedPad2;
+        UCHAR IdealProcessor;
+    };
+};
+
+union TEB_CROSS_TEB_FLAGS_UNION
+{
+    USHORT CrossTebFlags;
+    USHORT SpareCrossTebBits : 16;
+};
+
+union TEB_SAME_TEB_FLAGS_UNION
+{
+    USHORT SameTebFlags;
+    struct
+    {
+        USHORT SafeThunkCall : 1;
+        USHORT InDebugPrint : 1;
+        USHORT HasFiberData : 1;
+        USHORT SkipThreadAttach : 1;
+        USHORT WerInShipAssertCode : 1;
+        USHORT RanProcessInit : 1;
+        USHORT ClonedThread : 1;
+        USHORT SuppressDebugMsg : 1;
+        USHORT DisableUserStackWalk : 1;
+        USHORT RtlExceptionAttached : 1;
+        USHORT InitialThread : 1;
+        USHORT SessionAware : 1;
+        USHORT LoadOwner : 1;
+        USHORT LoaderWorker : 1;
+        USHORT SkipLoaderInit : 1;
+        USHORT SkipFileAPIBrokering : 1;
+    };
+};
+
 typedef struct _TEB
 {
     NT_TIB NtTib;
@@ -342,30 +400,30 @@ typedef struct _TEB
     ULONG CountOfOwnedCriticalSections;
     PVOID CsrClientThread;
     PVOID Win32ThreadInfo;
-    ULONG User32Reserved[26];
-    ULONG UserReserved[5];
+    ARRAY_CONTAINER<ULONG, 26> User32Reserved;
+    ARRAY_CONTAINER<ULONG, 5> UserReserved;
     PVOID WOW32Reserved;
     LCID CurrentLocale;
     ULONG FpSoftwareStatusRegister;
-    PVOID ReservedForDebuggerInstrumentation[16];
+    ARRAY_CONTAINER<PVOID, 16> ReservedForDebuggerInstrumentation;
 #ifdef _WIN64
-    PVOID SystemReserved1[25];
+    ARRAY_CONTAINER<PVOID, 25> SystemReserved1;
 
     PVOID HeapFlsData;
 
-    ULONG_PTR RngState[4];
+    ARRAY_CONTAINER<ULONG_PTR, 4> RngState;
 #else
-    PVOID SystemReserved1[26];
+    ARRAY_CONTAINER<PVOID, 26> SystemReserved1;
 #endif
 
     CHAR PlaceholderCompatibilityMode;
     BOOLEAN PlaceholderHydrationAlwaysExplicit;
-    CHAR PlaceholderReserved[10];
+    ARRAY_CONTAINER<CHAR, 10> PlaceholderReserved;
 
     ULONG ProxiedProcessId;
     ACTIVATION_CONTEXT_STACK ActivationStack;
 
-    UCHAR WorkingOnBehalfTicket[8];
+    ARRAY_CONTAINER<UCHAR, 8> WorkingOnBehalfTicket;
 
     NTSTATUS ExceptionCode;
 
@@ -382,7 +440,7 @@ typedef struct _TEB
     BOOLEAN UnalignedLoadStoreExceptions;
 #endif
 #ifndef _WIN64
-    UCHAR SpareBytes[23];
+    ARRAY_CONTAINER<UCHAR, 23> SpareBytes;
     ULONG TxFsContext;
 #endif
     GDI_TEB_BATCH GdiTebBatch;
@@ -391,10 +449,10 @@ typedef struct _TEB
     ULONG GdiClientPID;
     ULONG GdiClientTID;
     PVOID GdiThreadLocalInfo;
-    ULONG_PTR Win32ClientInfo[WIN32_CLIENT_INFO_LENGTH];
+    ARRAY_CONTAINER<ULONG_PTR, WIN32_CLIENT_INFO_LENGTH>  Win32ClientInfo;
 
-    PVOID glDispatchTable[233];
-    ULONG_PTR glReserved1[29];
+    ARRAY_CONTAINER<PVOID, 233> glDispatchTable;
+    ARRAY_CONTAINER<ULONG_PTR, 29> glReserved1;
     PVOID glReserved2;
     PVOID glSectionInfo;
     PVOID glSection;
@@ -405,22 +463,22 @@ typedef struct _TEB
     NTSTATUS LastStatusValue;
 
     UNICODE_STRING StaticUnicodeString;
-    WCHAR StaticUnicodeBuffer[STATIC_UNICODE_BUFFER_LENGTH];
+    ARRAY_CONTAINER<WCHAR, STATIC_UNICODE_BUFFER_LENGTH> StaticUnicodeBuffer;
 
     PVOID DeallocationStack;
 
-    PVOID TlsSlots[TLS_MINIMUM_AVAILABLE];
+    ARRAY_CONTAINER<PVOID, TLS_MINIMUM_AVAILABLE> TlsSlots;
     LIST_ENTRY TlsLinks;
 
     PVOID Vdm;
     PVOID ReservedForNtRpc;
-    PVOID DbgSsReserved[2];
+    ARRAY_CONTAINER<PVOID, 2> DbgSsReserved;
 
     ULONG HardErrorMode;
 #ifdef _WIN64
-    PVOID Instrumentation[11];
+    ARRAY_CONTAINER<PVOID, 11> Instrumentation;
 #else
-    PVOID Instrumentation[9];
+    ARRAY_CONTAINER<PVOID, 9> Instrumentation;
 #endif
     GUID ActivityId;
 
@@ -430,18 +488,7 @@ typedef struct _TEB
     PVOID WinSockData;
     ULONG GdiBatchCount;
 
-    union
-    {
-        PROCESSOR_NUMBER CurrentIdealProcessor;
-        ULONG IdealProcessorValue;
-        struct
-        {
-            UCHAR ReservedPad0;
-            UCHAR ReservedPad1;
-            UCHAR ReservedPad2;
-            UCHAR IdealProcessor;
-        };
-    };
+    TEB_CURRENT_IDEAL_PROCESSOR_UNION CurrentIdealProcessor;
 
     ULONG GuaranteedStackBytes;
     PVOID ReservedForPerf;
@@ -469,34 +516,8 @@ typedef struct _TEB
     PVOID MergedPrefLanguages;
     ULONG MuiImpersonation;
 
-    union
-    {
-        USHORT CrossTebFlags;
-        USHORT SpareCrossTebBits : 16;
-    };
-    union
-    {
-        USHORT SameTebFlags;
-        struct
-        {
-            USHORT SafeThunkCall : 1;
-            USHORT InDebugPrint : 1;
-            USHORT HasFiberData : 1;
-            USHORT SkipThreadAttach : 1;
-            USHORT WerInShipAssertCode : 1;
-            USHORT RanProcessInit : 1;
-            USHORT ClonedThread : 1;
-            USHORT SuppressDebugMsg : 1;
-            USHORT DisableUserStackWalk : 1;
-            USHORT RtlExceptionAttached : 1;
-            USHORT InitialThread : 1;
-            USHORT SessionAware : 1;
-            USHORT LoadOwner : 1;
-            USHORT LoaderWorker : 1;
-            USHORT SkipLoaderInit : 1;
-            USHORT SkipFileAPIBrokering : 1;
-        };
-    };
+    TEB_CROSS_TEB_FLAGS_UNION CrossTebFlags;
+    TEB_SAME_TEB_FLAGS_UNION SameTebFlags;
 
     PVOID TxnScopeEnterCallback;
     PVOID TxnScopeExitCallback;
@@ -513,9 +534,9 @@ typedef struct _TEB
     PVOID SchedulerSharedDataSlot; // 24H2
     PVOID HeapWalkContext;
     GROUP_AFFINITY PrimaryGroupAffinity;
-    ULONG Rcu[2];
+    ARRAY_CONTAINER<ULONG, 2> Rcu;
 } TEB, *PTEB;
-
+/*
 #ifdef _WIN64
 //C_ASSERT(sizeof(TEB) == 0x1850); // WIN11
 C_ASSERT(sizeof(TEB) == 0x1878); // 24H2
@@ -523,5 +544,5 @@ C_ASSERT(sizeof(TEB) == 0x1878); // 24H2
 //C_ASSERT(sizeof(TEB) == 0x1018); // WIN11
 C_ASSERT(sizeof(TEB) == 0x1038); // 24H2
 #endif
-
+*/
 #endif

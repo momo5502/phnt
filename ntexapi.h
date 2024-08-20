@@ -8,6 +8,7 @@
 #define _NTEXAPI_H
 
 #include <ntkeapi.h>
+#include "helper.h"
 
 #if (PHNT_MODE != PHNT_MODE_KERNEL)
 
@@ -4970,6 +4971,97 @@ typedef enum _ALTERNATIVE_ARCHITECTURE_TYPE
 #define SHARED_GLOBAL_FLAGS_QPC_BYPASS_A73_ERRATA (0x40)
 #define SHARED_GLOBAL_FLAGS_QPC_BYPASS_USE_RDTSCP (0x80)
 
+union KUSD_MITIGATION_POLICIES_UNION
+{
+    UCHAR MitigationPolicies;
+    struct
+    {
+        UCHAR NXSupportPolicy : 2;
+        UCHAR SEHValidationPolicy : 2;
+        UCHAR CurDirDevicesSkippedForDlls : 2;
+        UCHAR Reserved : 2;
+    };
+};
+
+union KUSD_VIRTUALIZATION_FLAGS_UNION
+{
+    UCHAR VirtualizationFlags;
+
+#if defined(_ARM64_)
+
+    //
+    // N.B. Keep this bitfield in sync with the one in arc.w.
+    //
+
+    struct
+    {
+        UCHAR ArchStartedInEl2 : 1;
+        UCHAR QcSlIsSupported : 1;
+        UCHAR : 6;
+    };
+
+#endif
+
+};
+
+union KUSD_SHARED_DATA_FLAGS_UNION
+{
+    ULONG SharedDataFlags;
+    struct
+    {
+        //
+        // The following bit fields are for the debugger only. Do not use.
+        // Use the bit definitions instead.
+        //
+
+        ULONG DbgErrorPortPresent : 1;
+        ULONG DbgElevationEnabled : 1;
+        ULONG DbgVirtEnabled : 1;
+        ULONG DbgInstallerDetectEnabled : 1;
+        ULONG DbgLkgEnabled : 1;
+        ULONG DbgDynProcessorEnabled : 1;
+        ULONG DbgConsoleBrokerEnabled : 1;
+        ULONG DbgSecureBootEnabled : 1;
+        ULONG DbgMultiSessionSku : 1;
+        ULONG DbgMultiUsersInSessionSku : 1;
+        ULONG DbgStateSeparationEnabled : 1;
+        ULONG DbgSplitTokenEnabled : 1;
+        ULONG DbgShadowAdminEnabled : 1;
+        ULONG SpareBits : 19;
+    } DUMMYSTRUCTNAME2;
+};
+
+union KUSD_TICK_COUNT_UNION
+{
+    volatile KSYSTEM_TIME TickCount;
+    volatile ULONG64 TickCountQuad;
+    struct
+    {
+        ULONG ReservedTickCountOverlay[3];
+        ULONG TickCountPad[1];
+    } DUMMYSTRUCTNAME;
+};
+
+union KUSD_QPC_DATA_UNION
+{
+    USHORT QpcData;
+    struct
+    {
+        //
+        // A bitfield indicating whether performance counter queries can
+        // read the counter directly (bypassing the system call) and flags.
+        //
+
+        volatile UCHAR QpcBypassEnabled;
+
+        //
+        // Reserved, leave as zero for backward compatibility. Was shift
+        // applied to the raw counter value to derive QPC count.
+        //
+
+        UCHAR QpcReserved;
+    };
+};
 
 typedef struct _KUSER_SHARED_DATA
 {
@@ -5016,7 +5108,7 @@ typedef struct _KUSER_SHARED_DATA
     //      an accurate result.
     //
 
-    WCHAR NtSystemRoot[260];
+    ARRAY_CONTAINER<WCHAR, 260> NtSystemRoot;
 
     //
     // Maximum stack trace depth if tracing enabled.
@@ -5080,7 +5172,7 @@ typedef struct _KUSER_SHARED_DATA
 
     NT_PRODUCT_TYPE NtProductType;
     BOOLEAN ProductTypeIsValid;
-    BOOLEAN Reserved0[1];
+    BOOLEAN Reserved0;
     USHORT NativeProcessorArchitecture;
 
     //
@@ -5099,7 +5191,7 @@ typedef struct _KUSER_SHARED_DATA
     // Processor features.
     //
 
-    BOOLEAN ProcessorFeatures[PROCESSOR_FEATURE_MAX];
+    ARRAY_CONTAINER<BOOLEAN, PROCESSOR_FEATURE_MAX> ProcessorFeatures;
 
     //
     // Reserved fields - do not use.
@@ -5153,18 +5245,7 @@ typedef struct _KUSER_SHARED_DATA
     //
     // Mitigation policies.
     //
-
-    union
-    {
-        UCHAR MitigationPolicies;
-        struct
-        {
-            UCHAR NXSupportPolicy : 2;
-            UCHAR SEHValidationPolicy : 2;
-            UCHAR CurDirDevicesSkippedForDlls : 2;
-            UCHAR Reserved : 2;
-        };
-    };
+    KUSD_MITIGATION_POLICIES_UNION MitigationPolicies;
 
     //
     // Measured duration of a single processor yield, in cycles. This is used by
@@ -5226,33 +5307,13 @@ typedef struct _KUSER_SHARED_DATA
     //
     // Virtualization flags.
     //
-
-    union
-    {
-        UCHAR VirtualizationFlags;
-
-#if defined(_ARM64_)
-
-        //
-        // N.B. Keep this bitfield in sync with the one in arc.w.
-        //
-
-        struct
-        {
-            UCHAR ArchStartedInEl2 : 1;
-            UCHAR QcSlIsSupported : 1;
-            UCHAR : 6;
-        };
-
-#endif
-
-    };
+    KUSD_VIRTUALIZATION_FLAGS_UNION VirtualizationFlags;
 
     //
     // Reserved (available for reuse).
     //
 
-    UCHAR Reserved12[2];
+    ARRAY_CONTAINER<UCHAR, 2> Reserved12;
 
     //
     // This is a packed bitfield that contains various flags concerning
@@ -5262,35 +5323,9 @@ typedef struct _KUSER_SHARED_DATA
     // N.B. DbgMultiSessionSku must be accessed via the RtlIsMultiSessionSku
     //      API for an accurate result
     //
+    KUSD_SHARED_DATA_FLAGS_UNION SharedDataFlags;
 
-    union
-    {
-        ULONG SharedDataFlags;
-        struct
-        {
-            //
-            // The following bit fields are for the debugger only. Do not use.
-            // Use the bit definitions instead.
-            //
-
-            ULONG DbgErrorPortPresent       : 1;
-            ULONG DbgElevationEnabled       : 1;
-            ULONG DbgVirtEnabled            : 1;
-            ULONG DbgInstallerDetectEnabled : 1;
-            ULONG DbgLkgEnabled             : 1;
-            ULONG DbgDynProcessorEnabled    : 1;
-            ULONG DbgConsoleBrokerEnabled   : 1;
-            ULONG DbgSecureBootEnabled      : 1;
-            ULONG DbgMultiSessionSku        : 1;
-            ULONG DbgMultiUsersInSessionSku : 1;
-            ULONG DbgStateSeparationEnabled : 1;
-            ULONG DbgSplitTokenEnabled      : 1;
-            ULONG DbgShadowAdminEnabled     : 1;
-            ULONG SpareBits                 : 19;
-        } DUMMYSTRUCTNAME2;
-    } DUMMYUNIONNAME2;
-
-    ULONG DataFlagsPad[1];
+    ULONG DataFlagsPad;
 
     //
     // Depending on the processor, the code for fast system call will differ,
@@ -5328,29 +5363,20 @@ typedef struct _KUSER_SHARED_DATA
     // Reserved, available for reuse.
     //
 
-    ULONGLONG SystemCallPad[1];
+    ULONGLONG SystemCallPad;
 
     //
     // The 64-bit tick count.
     //
 
-    union
-    {
-        volatile KSYSTEM_TIME TickCount;
-        volatile ULONG64 TickCountQuad;
-        struct
-        {
-            ULONG ReservedTickCountOverlay[3];
-            ULONG TickCountPad[1];
-        } DUMMYSTRUCTNAME;
-    } DUMMYUNIONNAME3;
+    KUSD_TICK_COUNT_UNION TickCount;
 
     //
     // Cookie for encoding pointers system wide.
     //
 
     ULONG Cookie;
-    ULONG CookiePad[1];
+    ULONG CookiePad;
 
     //
     // Client id of the process having the focus in the current
@@ -5425,7 +5451,7 @@ typedef struct _KUSER_SHARED_DATA
     //      accurate result.
     //
 
-    ULONG EnclaveFeatureMask[4];
+    ARRAY_CONTAINER<ULONG, 4> EnclaveFeatureMask;
 
     //
     // Current coverage round for telemetry based coverage.
@@ -5438,7 +5464,7 @@ typedef struct _KUSER_SHARED_DATA
     // (UMGL).
     //
 
-    USHORT UserModeGlobalLogger[16];
+    ARRAY_CONTAINER<USHORT, 16> UserModeGlobalLogger;
 
     //
     // Settings that can enable the use of Image File Execution Options
@@ -5485,26 +5511,7 @@ typedef struct _KUSER_SHARED_DATA
 
     UCHAR Reserved9;
 
-    union
-    {
-        USHORT QpcData;
-        struct
-        {
-            //
-            // A bitfield indicating whether performance counter queries can
-            // read the counter directly (bypassing the system call) and flags.
-            //
-
-            volatile UCHAR QpcBypassEnabled;
-
-            //
-            // Reserved, leave as zero for backward compatibility. Was shift
-            // applied to the raw counter value to derive QPC count.
-            //
-
-            UCHAR QpcReserved;
-        };
-    };
+    KUSD_QPC_DATA_UNION QpcData;
 
     LARGE_INTEGER TimeZoneBiasEffectiveStart;
     LARGE_INTEGER TimeZoneBiasEffectiveEnd;
@@ -5528,7 +5535,7 @@ typedef struct _KUSER_SHARED_DATA
 #if defined(_ARM64_)
     XSTATE_CONFIGURATION XStateArm64;
 #else
-    ULONG Reserved10[210];
+    ARRAY_CONTAINER<ULONG, 210> Reserved10;
 #endif
 } KUSER_SHARED_DATA, *PKUSER_SHARED_DATA;
 
@@ -5584,7 +5591,7 @@ C_ASSERT(FIELD_OFFSET(KUSER_SHARED_DATA, Reserved2) == 0x30c);
 C_ASSERT(FIELD_OFFSET(KUSER_SHARED_DATA, SystemCallPad) == 0x318); // previously 0x310
 #if defined(_MSC_EXTENSIONS)
 C_ASSERT(FIELD_OFFSET(KUSER_SHARED_DATA, TickCount) == 0x320);
-C_ASSERT(FIELD_OFFSET(KUSER_SHARED_DATA, TickCountQuad) == 0x320);
+C_ASSERT(FIELD_OFFSET(KUSER_SHARED_DATA, TickCount.TickCountQuad) == 0x320);
 #endif
 C_ASSERT(FIELD_OFFSET(KUSER_SHARED_DATA, Cookie) == 0x330);
 C_ASSERT(FIELD_OFFSET(KUSER_SHARED_DATA, ConsoleSessionForegroundProcessId) == 0x338);
@@ -5608,8 +5615,8 @@ C_ASSERT(FIELD_OFFSET(KUSER_SHARED_DATA, ActiveProcessorCount) == 0x3c0);
 C_ASSERT(FIELD_OFFSET(KUSER_SHARED_DATA, ActiveGroupCount) == 0x3c4);
 C_ASSERT(FIELD_OFFSET(KUSER_SHARED_DATA, Reserved9) == 0x3c5);
 C_ASSERT(FIELD_OFFSET(KUSER_SHARED_DATA, QpcData) == 0x3c6);
-C_ASSERT(FIELD_OFFSET(KUSER_SHARED_DATA, QpcBypassEnabled) == 0x3c6);
-C_ASSERT(FIELD_OFFSET(KUSER_SHARED_DATA, QpcReserved) == 0x3c7);
+C_ASSERT(FIELD_OFFSET(KUSER_SHARED_DATA, QpcData.QpcBypassEnabled) == 0x3c6);
+C_ASSERT(FIELD_OFFSET(KUSER_SHARED_DATA, QpcData.QpcReserved) == 0x3c7);
 C_ASSERT(FIELD_OFFSET(KUSER_SHARED_DATA, TimeZoneBiasEffectiveStart) == 0x3c8);
 C_ASSERT(FIELD_OFFSET(KUSER_SHARED_DATA, TimeZoneBiasEffectiveEnd) == 0x3d0);
 C_ASSERT(FIELD_OFFSET(KUSER_SHARED_DATA, XState) == 0x3d8);
@@ -5644,7 +5651,7 @@ NtGetTickCount64(
 
 #ifdef _WIN64
 
-    tickCount.QuadPart = USER_SHARED_DATA->TickCountQuad;
+    tickCount.QuadPart = USER_SHARED_DATA->TickCount.TickCountQuad;
 
 #else
 
@@ -5673,7 +5680,7 @@ NtGetTickCount(
 {
 #ifdef _WIN64
 
-    return (ULONG)((USER_SHARED_DATA->TickCountQuad * USER_SHARED_DATA->TickCountMultiplier) >> 24);
+    return (ULONG)((USER_SHARED_DATA->TickCount.TickCountQuad * USER_SHARED_DATA->TickCountMultiplier) >> 24);
 
 #else
 

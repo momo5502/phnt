@@ -7,6 +7,8 @@
 #ifndef _NTRTL_H
 #define _NTRTL_H
 
+#include "helper.h"
+
 #define RtlOffsetToPointer(Base, Offset) ((PCHAR)(((PCHAR)(Base)) + ((ULONG_PTR)(Offset))))
 #define RtlPointerToOffset(Base, Pointer) ((ULONG)(((PCHAR)(Pointer)) - ((PCHAR)(Base))))
 
@@ -2816,7 +2818,7 @@ typedef struct _RTL_USER_PROCESS_PARAMETERS
     UNICODE_STRING DesktopInfo;
     UNICODE_STRING ShellInfo;
     UNICODE_STRING RuntimeData;
-    RTL_DRIVE_LETTER_CURDIR CurrentDirectories[RTL_MAX_DRIVE_LETTERS];
+    ARRAY_CONTAINER<RTL_DRIVE_LETTER_CURDIR, RTL_MAX_DRIVE_LETTERS> CurrentDirectories;
 
     ULONG_PTR EnvironmentSize;
     ULONG_PTR EnvironmentVersion;
