@@ -96,6 +96,7 @@ typedef enum _MEMORY_INFORMATION_CLASS
     MemoryPhysicalContiguityInformation, // MEMORY_PHYSICAL_CONTIGUITY_INFORMATION // since 20H1
     MemoryBadInformation, // since WIN11
     MemoryBadInformationAllProcesses, // since 22H1
+    MemoryImageExtensionInformation, // since 24H2
     MaxMemoryInfoClass
 } MEMORY_INFORMATION_CLASS;
 #else
@@ -113,7 +114,15 @@ typedef enum _MEMORY_INFORMATION_CLASS
 #define MemoryPhysicalContiguityInformation 0xB
 #define MemoryBadInformation 0xC
 #define MemoryBadInformationAllProcesses 0xD
+#define MemoryImageExtensionInformation 0xE
 #endif
+
+typedef struct _MEMORY_IMAGE_EXTENSION_INFORMATION
+{
+    PVOID PageTypeArgs;
+    ULONG PageOffset;
+    SIZE_T PageSize;
+} MEMORY_IMAGE_EXTENSION_INFORMATION;
 
 typedef struct _MEMORY_WORKING_SET_BLOCK
 {
